@@ -1,0 +1,28 @@
+---
+- hosts: all
+
+  tasks:
+    - name: Update APT package manager repositories cache
+      become: true
+      apt:
+        update_cache: yes
+      changed_when: false
+
+    - name: Upgrade installed packages
+      become: true
+      apt:
+        upgrade: dist
+        autoremove: yes
+        autoclean: yes
+      register: result
+
+    - name: List installed and updated packages
+      shell: grep -E "^$(date +%Y-%m-%d).+ (install|upgrade) " /var/log/dpkg.log |cut -d " " -f 3-5
+      register: packages
+      changed_when: false
+
+    - name: Show Output
+      debug: msg="{{ packages.stdout_lines }}"
+      changed_when: false
+
+...
