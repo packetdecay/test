@@ -1,0 +1,62 @@
+---
+- name: Install crisis tools
+  hosts: all
+  become: yes
+  tasks:
+    - name: Check if packages are installed
+      package_facts:
+        manager: auto
+
+    - name: Define package list based on distribution
+      vars:
+        debian_packages:
+          - procps
+          - sysstat
+          - tcpdump
+          - bpfcc-tools
+          - bpftrace
+          - trace-cmd
+          - nicstat
+          - ethtool
+          - tiptop
+          - linux-perf
+          - smartmontools
+          - tldr 
+        ubuntu_packages:
+          - procps
+          - sysstat
+          - tcpdump
+          - bpfcc-tools
+          - bpftrace
+          - trace-cmd
+          - nicstat
+          - ethtool
+          - tiptop
+          - linux-tools-common
+          - smartmontools
+          - tldr
+        redhat_packages:
+          - procps-ng
+          - sysstat
+          - tcpdump
+          - bcc-tools
+          - bpftrace
+          - trace-cmd
+          - nicstat
+          - ethtool
+          - htop
+          - perf
+          - smartmontools
+      set_fact:
+        packages_to_install: >-
+          {{ ubuntu_packages if ansible_facts['distribution'] == 'Ubuntu'
+             else debian_packages if ansible_facts['distribution'] == 'Debian'
+             else redhat_packages if ansible_facts['os_family'] == 'RedHat'
+             else [] }}
+
+    - name: Install missing packages
+      package:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ packages_to_install }}"
+      when: item not in ansible_facts.packages
