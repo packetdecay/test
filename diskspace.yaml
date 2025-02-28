@@ -1,24 +1,39 @@
 ---
-- name: Check disk space
+- name: Check disk space on all mount points
   hosts: "all"
+  gather_facts: false
 
   tasks:
-    - name: Check disk space available
+    - name: Get all mounted filesystems
       ansible.builtin.shell:
         cmd: |
           set -euo pipefail
-          df -Ph / | awk 'NR==2 {print $5}' | sed 's/%//'
+          df -PTh | awk 'NR>1 && $2 !~ /tmpfs|devtmpfs/ {print $7}'
         executable: /bin/bash
+      register: mount_points
       changed_when: false
-      check_mode: false
-      register: disk_usage
 
-    - name: Disk usage is above 80%
+    - name: Check disk space for each mount point
+      ansible.builtin.shell:
+        cmd: |
+          set -euo pipefail
+          df -Ph "{{ item }}" | awk 'NR==2 {print $5}' | sed 's/%//'
+        executable: /bin/bash
+      loop: "{{ mount_points.stdout_lines }}"
+      register: disk_usages
+      changed_when: false
+
+    - name: Warn if disk usage is above 80%
       ansible.builtin.fail:
-        msg: "Disk usage is at {{ disk_usage.stdout }}%, which is above 80%! Immediate action required."
-      when: disk_usage.stdout | int > 80
+        msg: "Disk usage on {{ item.item }} is at {{ item.stdout }}%, which is above 80%! Immediate action required."
+      loop: "{{ disk_usages.results }}"
+      when: item.stdout | int > 80
 
-    - name: Print disk usage
+    - name: Create a string for disk usage report
+      ansible.builtin.set_fact:
+        disk_report: "Disk usage report for {{ inventory_hostname }}: {% for item in disk_usages.results %} - {{ item.item }}: {{ item.stdout }}% {% endfor %}"
+
+    - name: Display disk usage report
       ansible.builtin.debug:
-        msg: "Disk usage is at {{ disk_usage.stdout }}%"
+        msg: "{{ disk_report }}"
       changed_when: false
