@@ -1,0 +1,56 @@
+---
+- name: Check installed and listening services
+  hosts: all
+  become: yes
+  tasks:
+    - name: Retrieve previously saved active services
+      slurp:
+        src: "/tmp/active_services_{{ inventory_hostname }}.txt"
+      register: old_active_services
+      ignore_errors: yes
+
+    - name: Retrieve previously saved listening services
+      slurp:
+        src: "/tmp/listening_services_{{ inventory_hostname }}.txt"
+      register: old_listening_services
+      ignore_errors: yes
+
+    - name: Decode previously saved active services
+      set_fact:
+        old_active_services_list: "{{ old_active_services.content | b64decode | split('\n') | list }}"
+      when: old_active_services.content is defined
+
+    - name: Decode previously saved listening services
+      set_fact:
+        old_listening_services_list: "{{ old_listening_services.content | b64decode | split('\n') | list }}"
+      when: old_listening_services.content is defined
+
+    - name: List all active services
+      command: systemctl list-units --type=service --no-pager
+      register: active_services
+
+    - name: Save active services to a file
+      copy:
+        content: "{{ active_services.stdout }}"
+        dest: "/tmp/active_services_{{ inventory_hostname }}.txt"
+
+    - name: Check which services are listening on the network
+      command: ss -tulnp
+      register: listening_services
+
+    - name: Save listening services to a file
+      copy:
+        content: "{{ listening_services.stdout }}"
+        dest: "/tmp/listening_services_{{ inventory_hostname }}.txt"
+
+    - name: Compare services and fail if new ones are detected
+      fail:
+        msg: "New services detected on {{ inventory_hostname }}: {{ item }}"
+      loop: "{{ active_services.stdout_lines | difference(old_active_services_list | default([]) | list) }}"
+      when: old_active_services_list is defined and active_services.stdout_lines | difference(old_active_services_list | default([]) | list) | length > 0
+
+    - name: Compare listening services and fail if new ones are detected
+      fail:
+        msg: "New listening services detected on {{ inventory_hostname }}: {{ item }}"
+      loop: "{{ listening_services.stdout_lines | difference(old_listening_services_list | default([]) | list) }}"
+      when: old_listening_services_list is defined and listening_services.stdout_lines | difference(old_listening_services_list | default([]) | list) | length > 0
