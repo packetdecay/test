@@ -1,5 +1,5 @@
 ---
-- name: Check available updates and report to console and Discord
+- name: Check available updates and report
   hosts: all
   become: yes
   gather_facts: yes
@@ -8,20 +8,20 @@
     discord_webhook_url: "{{ lookup('env', 'DISCORD_WEBHOOK_URL') }}"
 
   tasks:
-    - name: Ensure apt cache is up to date
+    - name: Update apt cache
       apt:
         update_cache: yes
         cache_valid_time: 3600
 
-    - name: Get list of upgradable packages (suppress warnings)
-      shell: apt list --upgradable 2>/dev/null | tail -n +2
+    - name: Get list of upgradable packages
+      command: apt list --upgradable
       register: apt_upgradable
       changed_when: false
       failed_when: false
 
     - name: Filter list of upgradable packages
       set_fact:
-        upgradable_packages: "{{ apt_upgradable.stdout_lines | reject('search', '\\[installed\\]$') | list }}"
+        upgradable_packages: "{{ apt_upgradable.stdout_lines[1:] | list }}"
 
     - name: Check if there are any available updates
       set_fact:
@@ -34,15 +34,16 @@
           Available updates on {{ inventory_hostname }}:
           {{ upgradable_packages | join('\n') }}
 
-    - name: Format Discord message
+    - name: Format Discord message as lines (with real newlines)
       when: updates_available
       set_fact:
-        discord_payload: >-
-          {{
-            {
-              "content": "**" ~ inventory_hostname ~ "**\nThe following updates are available:\n```" ~ (upgradable_packages | join('\n')) ~ "```"
-            }
-          }}
+        discord_payload:
+          content: |
+            **{{ inventory_hostname }}**
+            The following updates are available:
+            ```
+            {{ upgradable_packages | join('\n') }}
+            ```
 
     - name: Send message to Discord
       when: updates_available
@@ -51,6 +52,6 @@
         method: POST
         headers:
           Content-Type: "application/json"
-        body: "{{ discord_payload | to_json }}"
+        body: "{{ discord_payload }}"
         body_format: json
         status_code: 204
