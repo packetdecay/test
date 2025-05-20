@@ -13,11 +13,6 @@
         update_cache: yes
         cache_valid_time: 3600
 
-    - name: Get list of upgradable packages
-      command: apt list --upgradable
-      register: apt_upgradable
-      changed_when: false
-
     - name: Install available upgrades
       apt:
         upgrade: dist
@@ -32,19 +27,19 @@
       changed_when: false
       failed_when: false
 
-    - name: Print installed updates to console (Ansible output)
-      when:
-        - upgrade_result.changed
-        - installed_packages.stdout != ""
+    - name: Check if updates were installed
+      set_fact:
+        updates_installed: "{{ installed_packages.stdout != '' }}"
+
+    - name: Print installed updates to Ansible console
+      when: updates_installed
       debug:
         msg: |
           Updates installed on {{ inventory_hostname }}:
           {{ installed_packages.stdout }}
 
     - name: Send Discord notification if updates were installed
-      when:
-        - upgrade_result.changed
-        - installed_packages.stdout != ""
+      when: updates_installed
       block:
         - name: Prepare message
           set_fact:
@@ -52,16 +47,3 @@
               **{{ inventory_hostname }}**
               The following updates were installed today:
               {{ installed_packages.stdout }}
-
-        - name: Send message to Discord
-          uri:
-            url: "{{ discord_webhook_url }}"
-            method: POST
-            headers:
-              Content-Type: "application/json"
-            body: >
-              {
-                "content": {{ discord_message | to_json }}
-              }
-            body_format: json
-            status_code: 204
