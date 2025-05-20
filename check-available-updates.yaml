@@ -1,49 +1,37 @@
 ---
-- name: Check available updates and report
+- name: Check for available updates and report to Discord
   hosts: all
-  become: yes
-  gather_facts: yes
+  become: true
+  gather_facts: false
 
   vars:
-    discord_webhook_url: "{{ lookup('env', 'DISCORD_WEBHOOK_URL') }}"
+    discord_webhook_url: "https://discord.com/api/webhooks/WEBHOOK-ID/WEBHOOK-TOKEN"
 
   tasks:
-    - name: Update apt cache
+
+    - name: Update package cache
       apt:
         update_cache: yes
-        cache_valid_time: 3600
+      register: apt_update
 
     - name: Get list of upgradable packages
       command: apt list --upgradable
-      register: apt_upgradable
+      register: upgradable_raw
       changed_when: false
-      failed_when: false
 
     - name: Filter list of upgradable packages
       set_fact:
-        upgradable_packages: "{{ apt_upgradable.stdout_lines[1:] | list }}"
+        upgradable_packages: "{{ upgradable_raw.stdout_lines[1:] | select('match', '^[^Listing].*') | list }}"
 
-    - name: Check if there are any available updates
+    - name: Determine if there are updates
       set_fact:
         updates_available: "{{ upgradable_packages | length > 0 }}"
-
-    - name: Print available updates to Ansible console
-      when: updates_available
-      debug:
-        msg: |
-          Available updates on {{ inventory_hostname }}:
-          {{ upgradable_packages | join('\n') }}
 
     - name: Build Discord message
       when: updates_available
       set_fact:
         discord_payload:
-          content: >
-            **{{ inventory_hostname }}**
-            The following updates are available:
-            ```
-{{ upgradable_packages | join('\n') }}
-            ```
+          content: "{{ '**' + inventory_hostname + '**\\nThe following updates are available:\\n```\\n' + (upgradable_packages | join('\\n')) + '\\n```' }}"
 
     - name: Send message to Discord
       when: updates_available
@@ -52,6 +40,5 @@
         method: POST
         headers:
           Content-Type: "application/json"
-        body: "{{ discord_payload | to_nice_json }}"
-        body_format: json
+        body: "{{ discord_payload | to_json }}"
         status_code: 204
