@@ -1,0 +1,58 @@
+---
+- name: Check available updates and report
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  vars:
+    discord_webhook_url: "{{ lookup('env', 'DISCORD_WEBHOOK_URL') }}"
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Get list of upgradable packages
+      command: apt list --upgradable 2>/dev/null
+      register: apt_upgradable
+      changed_when: false
+      failed_when: false
+
+    - name: Clean up package list output
+      set_fact:
+        upgradable_packages: "{{ apt_upgradable.stdout_lines[1:] | reject('search', '\\[installed\\]$') | list }}"
+
+    - name: Check if there are any available updates
+      set_fact:
+        updates_available: "{{ upgradable_packages | length > 0 }}"
+
+    - name: Print available updates to Ansible console
+      when: updates_available
+      debug:
+        msg: |
+          Available updates on {{ inventory_hostname }}:
+          {{ upgradable_packages | join('\n') }}
+
+    - name: Send Discord notification about available updates
+      when: updates_available
+      block:
+        - name: Prepare message
+          set_fact:
+            discord_message: |
+              **{{ inventory_hostname }}**
+              The following updates are available:
+              {{ upgradable_packages | join('\n') }}
+
+        - name: Send message to Discord
+          uri:
+            url: "{{ discord_webhook_url }}"
+            method: POST
+            headers:
+              Content-Type: "application/json"
+            body: >
+              {
+                "content": "{{ discord_message }}"
+              }
+            body_format: json
+            status_code: 204
