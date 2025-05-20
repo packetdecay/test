@@ -34,18 +34,26 @@
           Available updates on {{ inventory_hostname }}:
           {{ upgradable_packages | join('\n') }}
 
-    - name: Send Discord notification about available updates
+    - name: Format Discord message
+      when: updates_available
+      set_fact:
+        discord_message: |
+          **{{ inventory_hostname }}**
+          The following updates are available:
+          ```
+          {{ upgradable_packages | join('\n') }}
+          ```
+
+    - name: Send message to Discord
       when: updates_available
       uri:
         url: "{{ discord_webhook_url }}"
         method: POST
         headers:
           Content-Type: "application/json"
-        body: >
-          {{
-            {
-              "content": "**" + inventory_hostname + "**\nThe following updates are available:\n```" + (upgradable_packages | join('\n')) + "```"
-            } | to_json
-          }}
+        body: |
+          {
+            "content": "{{ discord_message | replace('\n', '\\n') }}"
+          }
         body_format: json
         status_code: 204
