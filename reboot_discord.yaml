@@ -1,0 +1,73 @@
+---
+- name: Check if reboot is required and notify
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  vars:
+    discord_webhook_url: "{{ lookup('env', 'DISCORD_WEBHOOK_URL') }}"
+    discord_message: ""
+
+  tasks:
+    - name: Check if reboot is required (Ubuntu/Debian)
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Get list of packages requiring reboot (Ubuntu/Debian)
+      shell: cat /var/run/reboot-required.pkgs
+      when: reboot_required.stat.exists
+      register: pkgs_contents
+      changed_when: false
+
+    - name: Check if reboot is required (RHEL-based)
+      command: needs-restarting -r
+      register: reboot_required_rhel
+      ignore_errors: true
+      changed_when: false
+      when: ansible_facts['os_family'] == "RedHat"
+
+    - name: Set message for Ubuntu/Debian
+      when: reboot_required.stat.exists
+      set_fact:
+        discord_message: |
+          **{{ inventory_hostname }}**
+          Reboot is required.
+          Affected packages:
+          {{ pkgs_contents.stdout_lines | join('\n') }}
+
+    - name: Set message for RHEL-based
+      when: ansible_facts['os_family'] == "RedHat" and reboot_required_rhel.rc != 0
+      set_fact:
+        discord_message: |
+          **{{ inventory_hostname }}**
+          Reboot is required.
+          One or more services require restart.
+
+    - name: Show reboot-required message in console
+      when: discord_message | length > 0
+      debug:
+        msg: "{{ discord_message }}"
+
+    - name: Send reboot-required message to Discord
+      when: discord_message | length > 0
+      uri:
+        url: "{{ discord_webhook_url }}"
+        method: POST
+        headers:
+          Content-Type: "application/json"
+        body: >
+          {
+            "content": "{{ discord_message }}"
+          }
+        body_format: json
+        status_code: 204
+
+    - name: Reboot the server if needed (Ubuntu/Debian)
+      reboot:
+      when: reboot_required.stat.exists
+
+    - name: Reboot the server if needed (RHEL-based)
+      reboot:
+      when: ansible_facts['os_family'] == "RedHat" and reboot_required_rhel.rc != 0
