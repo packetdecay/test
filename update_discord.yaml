@@ -50,7 +50,7 @@
               Content-Type: "application/json"
             body: >
               {
-                "content": "{{ discord_message }}"
+                "content": {{ discord_message | to_json }}
               }
             body_format: json
             status_code: 204
