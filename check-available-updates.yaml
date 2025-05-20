@@ -14,14 +14,14 @@
         cache_valid_time: 3600
 
     - name: Get list of upgradable packages
-      shell: apt list --upgradable 2>/dev/null | tail -n +2
+      command: apt list --upgradable 2>/dev/null
       register: apt_upgradable
       changed_when: false
       failed_when: false
 
-    - name: Set list of upgradable packages
+    - name: Clean up package list output
       set_fact:
-        upgradable_packages: "{{ apt_upgradable.stdout_lines }}"
+        upgradable_packages: "{{ apt_upgradable.stdout_lines[1:] | reject('search', '\\[installed\\]$') | list }}"
 
     - name: Check if there are any available updates
       set_fact:
@@ -34,15 +34,7 @@
           Available updates on {{ inventory_hostname }}:
           {{ upgradable_packages | join('\n') }}
 
-    - name: Prepare Discord message
-      when: updates_available
-      set_fact:
-        discord_message: |
-          **{{ inventory_hostname }}**
-          The following updates are available:
-          {{ upgradable_packages | join('\n') }}
-
-    - name: Send update message to Discord
+    - name: Send Discord notification about available updates
       when: updates_available
       uri:
         url: "{{ discord_webhook_url }}"
@@ -50,8 +42,10 @@
         headers:
           Content-Type: "application/json"
         body: >
-          {
-            "content": "{{ discord_message }}"
-          }
+          {{
+            {
+              "content": "**" + inventory_hostname + "**\nThe following updates are available:\n" + (upgradable_packages | join('\n'))
+            } | to_json
+          }}
         body_format: json
         status_code: 204
