@@ -32,15 +32,26 @@
       changed_when: false
       failed_when: false
 
-    - name: Send Discord notification if updates installed
-      when: upgrade_result.changed
+    - name: Print installed updates to console (Ansible output)
+      when:
+        - upgrade_result.changed
+        - installed_packages.stdout != ""
+      debug:
+        msg: |
+          Updates installed on {{ inventory_hostname }}:
+          {{ installed_packages.stdout }}
+
+    - name: Send Discord notification if updates were installed
+      when:
+        - upgrade_result.changed
+        - installed_packages.stdout != ""
       block:
         - name: Prepare message
           set_fact:
             discord_message: |
               **{{ inventory_hostname }}**
               The following updates were installed today:
-              {{ installed_packages.stdout | default('No updates were installed.') }}
+              {{ installed_packages.stdout }}
 
         - name: Send message to Discord
           uri:
