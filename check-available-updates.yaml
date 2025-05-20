@@ -13,15 +13,15 @@
         update_cache: yes
         cache_valid_time: 3600
 
-    - name: Get list of upgradable packages
-      command: apt list --upgradable 2>/dev/null
-      register: apt_upgradable
-      changed_when: false
-      failed_when: false
+    - name: Gather package facts
+      package_facts:
+        manager: auto
 
-    - name: Clean up package list output
+    - name: Filter list of upgradable packages
       set_fact:
-        upgradable_packages: "{{ apt_upgradable.stdout_lines[1:] | reject('search', '\\[installed\\]$') | list }}"
+        upgradable_packages: "{{ ansible_facts.packages | dict2items
+          | selectattr('value', 'select', 'updated')
+          | map(attribute='key') | list }}"
 
     - name: Check if there are any available updates
       set_fact:
