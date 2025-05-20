@@ -1,0 +1,56 @@
+---
+- name: Install updates and notify if updates installed
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  vars:
+    discord_webhook_url: "{{ lookup('env', 'DISCORD_WEBHOOK_URL') }}"
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Get list of upgradable packages
+      command: apt list --upgradable
+      register: apt_upgradable
+      changed_when: false
+
+    - name: Install available upgrades
+      apt:
+        upgrade: dist
+        update_cache: yes
+      register: upgrade_result
+      changed_when: upgrade_result.stdout != "" or upgrade_result.stderr != ""
+
+    - name: Get list of installed packages today
+      command: >
+        bash -c "grep ' install ' /var/log/dpkg.log | grep \"$(date '+%Y-%m-%d')\""
+      register: installed_packages
+      changed_when: false
+      failed_when: false
+
+    - name: Send Discord notification if updates installed
+      when: upgrade_result.changed
+      block:
+        - name: Prepare message
+          set_fact:
+            discord_message: |
+              **{{ inventory_hostname }}**
+              The following updates were installed today:
+              {{ installed_packages.stdout | default('No updates were installed.') }}
+
+        - name: Send message to Discord
+          uri:
+            url: "{{ discord_webhook_url }}"
+            method: POST
+            headers:
+              Content-Type: "application/json"
+            body: >
+              {
+                "content": "{{ discord_message }}"
+              }
+            body_format: json
+            status_code: 204
