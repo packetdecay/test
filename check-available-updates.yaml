@@ -34,15 +34,15 @@
           Available updates on {{ inventory_hostname }}:
           {{ upgradable_packages | join('\n') }}
 
-    - name: Format Discord message as lines (with real newlines)
+    - name: Build Discord message
       when: updates_available
       set_fact:
         discord_payload:
-          content: |
+          content: >
             **{{ inventory_hostname }}**
             The following updates are available:
             ```
-            {{ upgradable_packages | join('\n') }}
+{{ upgradable_packages | join('\n') }}
             ```
 
     - name: Send message to Discord
@@ -52,6 +52,6 @@
         method: POST
         headers:
           Content-Type: "application/json"
-        body: "{{ discord_payload }}"
+        body: "{{ discord_payload | to_nice_json }}"
         body_format: json
         status_code: 204
