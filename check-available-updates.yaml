@@ -1,42 +1,43 @@
 ---
-- name: Check and report available updates
+- name: Kontrollera uppgraderingar och skicka till Discord
   hosts: all
   gather_facts: false
-
   vars:
-    discord_webhook_url: "https://discord.com/api/webhooks/DITT_WEBHOOK_ID/DITT_TOKEN"
-    discord_username: "UpdateBot"
-    discord_avatar_url: "https://i.imgur.com/4M34hi2.png"
+    discord_webhook_url: "https://discord.com/api/webhooks/WEBHOOK-ID/WEBHOOK-TOKEN"
 
   tasks:
-    - name: Get list of upgradable packages
-      shell: apt list --upgradable 2>/dev/null | tail -n +2
-      register: apt_upgrades
+
+    - name: Hämta tillgängliga uppgraderingar
+      ansible.builtin.command: apt list --upgradable
+      register: upgrade_output
       changed_when: false
 
-    - name: Filter list of upgradable packages
+    - name: Extrahera lista på uppgraderbara paket
       set_fact:
-        upgradable_packages: "{{ apt_upgrades.stdout_lines | reject('match', '^Listing...') | list }}"
+        upgradable_packages: >-
+          {{
+            upgrade_output.stdout_lines
+            | select("match", "^[^Listing].*upgradable from")
+            | list
+          }}
 
-    - name: Format update list
+    - name: Formatera listan för Discord
       set_fact:
-        updates_formatted: "{{ upgradable_packages | join('\n') }}"
+        discord_message: >-
+          {%- if upgradable_packages | length > 0 -%}
+          Följande paket kan uppgraderas på {{ inventory_hostname }}:
+          {{ '\n' + upgradable_packages | join('\n') }}
+          {%- else -%}
+          Inga uppgraderingar tillgängliga på {{ inventory_hostname }}.
+          {%- endif -%}
 
-    - name: Send update report to Discord
-      uri:
+    - name: Skicka meddelande till Discord
+      ansible.builtin.uri:
         url: "{{ discord_webhook_url }}"
         method: POST
         headers:
           Content-Type: application/json
         body_format: json
-        body: >-
-          {{
-            {
-              "username": discord_username,
-              "avatar_url": discord_avatar_url,
-              "content": "**{{ inventory_hostname }}**\n"
-                         + (updates_formatted | default('Inga uppdateringar tillgängliga.') | regex_replace('\\\\n', '\n'))
-            }
-          }}
-        status_code: 204
-      when: upgradable_packages | length > 0
+        body:
+          content: "{{ discord_message }}"
+      delegate_to: localhost
