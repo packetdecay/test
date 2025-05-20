@@ -1,5 +1,5 @@
 ---
-- name: Check available updates and report
+- name: Check available updates and report to console and Discord
   hosts: all
   become: yes
   gather_facts: yes
@@ -8,18 +8,18 @@
     discord_webhook_url: "{{ lookup('env', 'DISCORD_WEBHOOK_URL') }}"
 
   tasks:
-    - name: Update apt cache
+    - name: Ensure apt cache is up to date
       apt:
         update_cache: yes
         cache_valid_time: 3600
 
-    - name: Get list of upgradable packages
+    - name: Get list of upgradable packages (suppress warnings)
       shell: apt list --upgradable 2>/dev/null | tail -n +2
       register: apt_upgradable
       changed_when: false
       failed_when: false
 
-    - name: Clean up package list output
+    - name: Filter list of upgradable packages
       set_fact:
         upgradable_packages: "{{ apt_upgradable.stdout_lines | reject('search', '\\[installed\\]$') | list }}"
 
@@ -44,7 +44,7 @@
         body: >
           {{
             {
-              "content": "**" + inventory_hostname + "**\nThe following updates are available:\n" + (upgradable_packages | join('\n'))
+              "content": "**" + inventory_hostname + "**\nThe following updates are available:\n```" + (upgradable_packages | join('\n')) + "```"
             } | to_json
           }}
         body_format: json
