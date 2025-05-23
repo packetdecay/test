@@ -1,0 +1,20 @@
+services:
+  pwpush-public:
+    image: docker.io/pglombardo/pwpush-public-gateway:latest
+    container_name: pwpush-public
+#    user: "1001:1001"
+    env_file:
+      - /home/dockeradmin/docker/pwpush/.env
+    environment:
+      TZ: Europe/Stockholm
+      DATABASE_URL: 'mysql2://${MYSQL_USER}:${MYSQL_PASSWORD}@pwpush-db:3306/pwpush_db'
+#      PWP__OVERRIDE_BASE_URL: "http://10.5.0.50:80"
+    ports:
+      - "5101:5100"
+    restart: unless-stopped
+    networks:
+      - pwpush-net
+
+networks:
+  pwpush-net:
+    external: true
