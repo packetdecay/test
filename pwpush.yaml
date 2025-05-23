@@ -1,0 +1,55 @@
+services:
+  db:
+    image: mysql:8.0.32
+    container_name: pwpush-db
+#    user: "1001:1001"
+    ports:
+      - "3306:3306"
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Stockholm
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: 'pwpush_db'
+      MYSQL_RANDOM_ROOT_PASSWORD: 'yes'
+    volumes:
+      - ${PWPUSH_PATH}/mysql-data:/var/lib/mysql
+    networks:
+      - pwpush-net
+
+    
+  pwpush:
+    image: docker.io/pglombardo/pwpush:latest
+    container_name: pwpush
+ #   user: "1001:1001"
+    env_file:
+    - /home/dockeradmin/docker/pwpush/.env 
+
+    environment:
+      TZ: Europe/Stockholm
+      DATABASE_URL: 'mysql2://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/pwpush_db'
+      PWP__SHOW_VERSION: "false"
+      PWP__TIMEZONE: "Europe/Stockholm"
+      PWP__PW__EXPIRE_AFTER_DAYS_DEFAULT: "3"
+      PWP__PW__EXPIRE_AFTER_VIEWS_MIN: "1"
+      PWP__PW__RETRIEVAL_STEP_DEFAULT: "true"
+      PWP__THEME: 'flatly'
+      PWP__OVERRIDE_BASE_URL: "http://10.5.0.50:5101"
+
+    ports:
+      - "5100:5100"
+    restart: unless-stopped
+    depends_on:
+      - db
+    links:
+     - db:mysql
+    volumes:
+
+      - ${PWPUSH_PATH}/data:/opt/PasswordPusher/storage:rw
+      - ${PWPUSH_PATH}/data/logos:/opt/PasswordPusher/public/logo:ro
+    networks:
+      - pwpush-net
+
+networks:
+  pwpush-net:
+    name: pwpush-net
