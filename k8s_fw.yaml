@@ -1,0 +1,76 @@
+roles/
+└── k8s_firewall_cilium/
+    ├── tasks/
+    │   └── main.yml
+    ├── defaults/
+    │   └── main.yml
+    └── vars/
+        └── main.yml
+
+# defaults/main.yml
+firewall_ssh_allowed_subnet: "192.168.1.0/24"
+firewall_k8s_node_subnet: "10.0.0.0/8"
+
+# vars/main.yml
+firewall_ports:
+  - { port: 22,    proto: tcp, source: "{{ firewall_ssh_allowed_subnet }}" }
+  - { port: 6443,  proto: tcp }
+  - { port: 2379,  proto: tcp, source: "{{ firewall_k8s_node_subnet }}" }
+  - { port: 2380,  proto: tcp, source: "{{ firewall_k8s_node_subnet }}" }
+  - { port: 10250, proto: tcp, source: "{{ firewall_k8s_node_subnet }}" }
+  - { port: 4240,  proto: tcp }
+  - { port: 8472,  proto: udp }
+
+# tasks/main.yml
+- name: Install UFW
+  apt:
+    name: ufw
+    state: present
+    update_cache: true
+  become: true
+
+- name: Reset UFW to default
+  ufw:
+    state: reset
+  become: true
+
+- name: Set default policies
+  ufw:
+    direction: incoming
+    policy: deny
+  become: true
+
+- name: Allow loopback traffic
+  ufw:
+    rule: allow
+    direction: in
+    interface: lo
+  become: true
+
+- name: Allow SSH
+  ufw:
+    rule: allow
+    port: 22
+    proto: tcp
+    from_ip: "{{ firewall_ssh_allowed_subnet }}"
+  become: true
+
+- name: Allow required ports
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    from_ip: "{{ item.source | default('any') }}"
+  loop: "{{ firewall_ports | rejectattr('port', 'equalto', 22) | list }}"
+  become: true
+
+- name: Allow ICMP (ping)
+  ufw:
+    rule: allow
+    proto: icmp
+  become: true
+
+- name: Enable UFW
+  ufw:
+    state: enabled
+  become: true
